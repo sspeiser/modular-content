@@ -6,12 +6,22 @@ language: en
 narrator: US English Female
 
 comment:  This template composes LiaScript courses from individual files.
-          When using the preprocessor
-          Multiline is also okay.
+          After using the preprocessor this template is removed.
+          
 
-link:     https://cdn.jsdelivr.net/chartist.js/latest/chartist.min.css
-
-script:   https://cdn.jsdelivr.net/chartist.js/latest/chartist.min.js
-
-translation: Français translations/French.md
+@include
+Test
+<script style="width: 100%; display: block" run-once="true" modify="false">
+console.log('whe')
+    // Get the URL of the course
+    const importingDoc = window.location.search.slice(1);
+    const modularUrl = 'https://sspeiser.github.io/modular-content/index.html?' + encodeURIComponent(importingDoc)
+    send.liascript(`
+        This is a LiaScript course using the modular-content extension.
+        To properly load this course, please use https://sspeiser.github.io/modular-content/ or directly [click here](${modularUrl}).
+    `)
+</script>
+@end
 -->
+
+# Creating modular LiaScript Courses
