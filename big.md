@@ -14,11 +14,4 @@ import: https://sspeiser.github.io/modular-content/README.md
 
 # A modular course
 
-## MainDoc section
-
-This is a section in the main document
-
-@include('example-page.md')
-
-
-## Another MainDoc section
+@include('nested.md')

@@ -1,11 +1,223 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Modular Content for LiaScript</title>
+    <script language="javascript">
+        if (window.location.search !== '') {
+            loadCourse(decodeURIComponent(window.location.search.slice(1)));
+        } else {
+
+        }
+
+        async function fetchWithCORSProxyFallback(url) {
+            try {
+                // Fetch the URL directly
+                response = await fetch(url);
+
+                // Check if the request was successful
+                if (response.ok) {
+                    return response; // Return the response if successful
+                } else {
+                    throw new Error('Request failed');
+                }
+            } catch (error) {
+                // Fetch failed. We will try with CORS proxy
+                console.error('Request failed. Trying with CORS proxy', error);
+            }
+            if (!url.startsWith('http')) {
+                throw new Error('Only absolute HTTP(S) URLs can be fetched with CORS proxy')
+            }
+            // If the proxy requests has an error, we throw it again
+            // Construct the proxy URL
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
+            console.log('Using CORS proxy:', proxyUrl);
+            // Fetch using CORS proxy
+            response = await fetch(proxyUrl);
+
+            // Check if the request was successful
+            if (response.ok) {
+                console.log('Request successful with CORS proxy');
+                return response; // Return the response if successful
+            } else {
+                throw new Error('Request failed even with CORS proxy');
+            }
+        }
+
+        function resetPage() {
+            if (window.location.search !== '') {
+                document.getElementById('courseUrl').value = window.location.search.slice(1);
+            }
+            document.getElementById('mainscreen').style.display = 'block';
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function writeStatus(status) {
+            document.getElementById('loadingstatus').innerHTML += status;
+        }
+
+        function writeError(error) {
+            writeStatus(error);
+            document.getElementById('loadingerror').style.display = 'block';
+        }
+
+        async function parseDocument(compositionUrl, data) {
+            // Search if import for modular-content is present
+            // If yes then remove whole line from data
+            // If no then return data
+            const importRegex = /import:\s+https:\/\/sspeiser.github.io\/modular-content\/README.md/g;
+            const matches = data.matchAll(importRegex);
+
+            // Remove all matches from data
+            let newData = '';
+            let lastIndex = 0;
+            let nMatches = 0;
+            for (const match of matches) {
+                newData += data.slice(lastIndex, match.index);
+                lastIndex = match.index + match[0].length;
+                nMatches++;
+            }
+            newData += data.slice(lastIndex);
+            data = newData;
+
+            if (nMatches === 0) {
+                return data;
+            }
+
+            const includeRegex = /@include\s*\(.*?\)/g;
+            const includeMatches = data.matchAll(includeRegex);
+
+            // Remove all matches from data
+            newData = '';
+            lastIndex = 0;
+            writeStatus('Loading includes ... <br />');
+            const promises = [];
+            for (const match of includeMatches) {
+                console.log(match[0]);
+                writeStatus('Loading ' + match[0] + ' ... <br />');
+                // Now get the URL from the match which is in between paranthesis of the @include call, maybe with or without quotes
+                let url = match[0].match(/@include\s*\((.*?)\)/)[1].replace(/['"]/g, '');
+                console.log(url);
+
+                if (!url.startsWith('http')) {
+                    // The imported document is a relative path
+                    // make it absolute using the URL of the importing doc
+                    if (url.startsWith('/')) {
+                        // The imported document is an absolute path
+                        // Add it to the domain of importingDoc
+                        // Keep only host from importing doc
+                        url = URL(compositionUrl).origin + url;
+                    } else {
+                        // The imported document is a relative path
+                        // Add it to the path of importingDoc
+                        url = compositionUrl.split('/').slice(0,-1).join('/') + '/' + url;
+                    }
+                }
+                console.log('Made absolute URL: ' + url);
+                writeStatus('Absolute URL: ' + url + ' ... <br />');
+
+                promises.push(fetchWithCORSProxyFallback(url)
+                    .then(response => response.text())
+                    .then(includeData => {
+                        writeStatus('Loaded ' + url + ' [ok] ' + includeData.length + " bytes loaded<br />");
+                        // includeData must be parsed again
+                        return parseDocument(url, includeData).then(document => {
+                            writeStatus('Parsed ' + url + ' [ok]<br />');
+                            data = data.replace(match[0], document);
+                        })
+                            .catch(error => {
+                                writeError(' [error] ' + error);
+                                data = data.replace(match[0], 'Error parsing ' + url);
+                        });
+                    })
+                    .catch(error => {
+                        writeError(' [error] ' + error);
+                        data = data.replace(match[0], 'Error loading ' + url);
+                    }));
+            }
+            await Promise.all(promises);
+            return data
+        }
+
+        function loadCourse(courseUrl) {
+            document.getElementById('mainscreen').style.display = 'none';
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('loadingstatus').innerHTML = '';
+            document.getElementById('loadingerror').style.display = 'none';
+
+            // TODO make recursive?
+            // TODO more stable parsing required?
+
+            writeStatus('Loading ' + courseUrl + ' ... ');
+
+            fetchWithCORSProxyFallback(courseUrl)
+                .then(response => response.text())
+                .then(data => {
+                    writeStatus(' [ok] ' + data.length + ' bytes loaded<br />');
+                    parseDocument(courseUrl, data).then(document => {
+                        writeStatus('[ok] Course loaded successfully<br />');
+                        const combinedUrl = 'data:text/plain;base64,' + btoa(document);
+ 
+                    // Provide URL to the application
+                    console.log('Combined URL:', combinedUrl);
+                    // Now you can pass this URL to your other application for processing
+                    
+                    url = 'https://liascript.github.io/course/?' + combinedUrl;
+                    window.location = url
+                    // window.open(url, '_blank').focus();
+                        // writeStatus(document)
+                    })
+                        .catch(error => {
+                            writeError(' [error] ' + error);
+                        })
+                })
+                .catch(error => {
+                    writeError(' [error] ' + error);
+                });
+
+
+            // const url = 'https://api.allorigins.win/get?url=' + encodeURIComponent(courseUrl);
+            // fetch(url)
+            //     .then(response => response.text())
+            //     .then(data => {
+            //         console.log(data)
+            //     })
+            //     .catch(error => {
+            //         console.error(error);
+            //     });
+        }
+    </script>
 </head>
+
 <body>
-    
+    <h1>Modular Content for LiaScript</h1>
+    <div id="mainscreen" style="display: none">
+        <p>This tool works as a preprocessor for LiaScript.
+            It allows you to import content from other LiaScript documents into one course.
+            This is useful for creating reusable content.
+        </p>
+
+        <p>
+            <label for="courseUrl">Course URL:</label>
+            <input type="text" id="courseUrl" name="courseUrl">
+            <button onclick="loadCourse(document.getElementById('courseUrl').value)">Load
+                course</button>
+        </p>
+    </div>
+    <div id="loading" style="display: none">
+        <p>Loading course</p>
+        <p id="loadingstatus"></p>
+        <button id="loadingerror" onclick="resetPage()" style="display: none">Go back</button>
+    </div>
+    <script language="javascript">
+        if (window.location.search !== '') {
+            loadCourse(decodeURIComponent(window.location.search.slice(1)));
+        } else {
+            document.getElementById('mainscreen').style.display = 'block';
+        }
+    </script>
 </body>
+
 </html>
