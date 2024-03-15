@@ -34,7 +34,7 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Copy publishable content
-        run: mkdir -p dist && cp README.md index.html example.md example-page.md dist/
+        run: mkdir -p dist && cp README.md index.html example.md example-page.md big.md nested.md nested2.md dist/
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
